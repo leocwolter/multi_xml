@@ -58,6 +58,16 @@ shared_examples_for "a parser" do |parser|
         end
       end
 
+      context "element with the same inner element and attribute name" do
+        before do
+          @xml = "<user name='John'><name>Smith</name></user>"
+        end
+
+        it "returns names as Array" do
+          expect(MultiXml.parse(@xml)['user']['name']).to eq ['John', 'Smith']
+        end
+      end
+
       context "with content" do
         before do
           @xml = '<user>Erik Michaels-Ober</user>'
@@ -89,65 +99,44 @@ shared_examples_for "a parser" do |parser|
         end
       end
 
+      context "typecast management" do
+        before do
+          @xml = %Q{
+            <global-settings>
+              <group>
+                <name>Settings</name>
+                <setting type="string">
+                  <description>Test</description>
+                </setting>
+              </group>
+            </global-settings>
+          }
+        end
+
+        context "with :typecast_xml_value => true" do
+          before do
+            @setting = MultiXml.parse(@xml)["global_settings"]["group"]["setting"]
+          end
+
+          it { expect(@setting).to eq "" }
+        end
+
+        context "with :typecast_xml_value => false" do
+          before do
+            @setting = MultiXml.parse(@xml, :typecast_xml_value => false)["global_settings"]["group"]["setting"]
+          end
+
+          it { expect(@setting).to eq({"type"=>"string", "description"=>{"__content__"=>"Test"}}) }
+        end
+      end
+
       context "with :symbolize_keys => true" do
         before do
-          @xml = '<user><name>Erik Michaels-Ober</name></user>'
+          @xml = '<users><user name="Erik Michaels-Ober"/><user><name>Wynn Netherland</name></user></users>'
         end
 
         it "symbolizes keys" do
-          expect(MultiXml.parse(@xml, :symbolize_keys => true)).to eq({:user => {:name => "Erik Michaels-Ober"}})
-        end
-      end
-
-      context "when value is true" do
-        before do
-          pending
-          @xml = '<tag>true</tag>'
-        end
-
-        it "returns true" do
-          expect(MultiXml.parse(@xml)['tag']).to be_true
-        end
-      end
-
-      context "when value is false" do
-        before do
-          pending
-          @xml = '<tag>false</tag>'
-        end
-
-        it "returns false" do
-          expect(MultiXml.parse(@xml)['tag']).to be_false
-        end
-      end
-
-      context "when key is id" do
-        before do
-          pending
-          @xml = '<id>1</id>'
-        end
-
-        it "returns a Fixnum" do
-          expect(MultiXml.parse(@xml)['id']).to be_a(Fixnum)
-        end
-
-        it "returns the correct number" do
-          expect(MultiXml.parse(@xml)['id']).to eq(1)
-        end
-      end
-
-      context "when key contains _id" do
-        before do
-          pending
-          @xml = '<tag_id>1</tag_id>'
-        end
-
-        it "returns a Fixnum" do
-          expect(MultiXml.parse(@xml)['tag_id']).to be_a(Fixnum)
-        end
-
-        it "returns the correct number" do
-          expect(MultiXml.parse(@xml)['tag_id']).to eq(1)
+          expect(MultiXml.parse(@xml, :symbolize_keys => true)).to eq({:users => {:user => [{:name => "Erik Michaels-Ober"}, {:name => "Wynn Netherland"}]}})
         end
       end
 

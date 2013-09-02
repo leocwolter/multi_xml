@@ -63,12 +63,18 @@ module MultiXml
 
   DISALLOWED_XML_TYPES = %w(symbol yaml)
 
+  DEFAULT_OPTIONS = {
+    :typecast_xml_value => true,
+    :disallowed_types => DISALLOWED_XML_TYPES,
+    :symbolize_keys => false
+  }
+
   class << self
     # Get the current parser class.
     def parser
-      return @@parser if defined?(@@parser)
+      return @parser if defined?(@parser)
       self.parser = self.default_parser
-      @@parser
+      @parser
     end
 
     # The default parser based on what you currently
@@ -80,7 +86,7 @@ module MultiXml
       return :libxml if defined?(::LibXML)
       return :nokogiri if defined?(::Nokogiri)
 
-      REQUIREMENT_MAP.each do |(library, parser)|
+      REQUIREMENT_MAP.each do |library, parser|
         begin
           require library
           return parser
@@ -101,9 +107,9 @@ module MultiXml
       case new_parser
       when String, Symbol
         require "multi_xml/parsers/#{new_parser.to_s.downcase}"
-        @@parser = MultiXml::Parsers.const_get("#{new_parser.to_s.split('_').map{|s| s.capitalize}.join('')}")
+        @parser = MultiXml::Parsers.const_get("#{new_parser.to_s.split('_').map{|s| s.capitalize}.join('')}")
       when Class, Module
-        @@parser = new_parser
+        @parser = new_parser
       else
         raise "Did not recognize your parser specification. Please specify either a symbol or a class."
       end
@@ -116,8 +122,12 @@ module MultiXml
     # <tt>:symbolize_keys</tt> :: If true, will use symbols instead of strings for the keys.
     #
     # <tt>:disallowed_types</tt> :: Types to disallow from being typecasted. Defaults to `['yaml', 'symbol']`. Use `[]` to allow all types.
+    #
+    # <tt>:typecast_xml_value</tt> :: If true, won't typecast values for parsed document
     def parse(xml, options={})
       xml ||= ''
+
+      options = DEFAULT_OPTIONS.merge(options)
 
       xml.strip! if xml.respond_to?(:strip!)
       begin
@@ -127,7 +137,8 @@ module MultiXml
         return {} if char.nil?
         xml.ungetc(char)
 
-        hash = typecast_xml_value(undasherize_keys(parser.parse(xml)), options[:disallowed_types]) || {}
+        hash = undasherize_keys(parser.parse(xml) || {})
+        hash = options[:typecast_xml_value] ? typecast_xml_value(hash, options[:disallowed_types]) : hash
       rescue DisallowedTypeError
         raise
       rescue parser.parse_error => error
@@ -171,22 +182,16 @@ module MultiXml
       f
     end
 
-    def symbolize_keys(hash)
-      hash.inject({}) do |result, (key, value)|
-        new_key = case key
-        when String
-          key.to_sym
-        else
-          key
+    def symbolize_keys(params)
+      case params
+      when Hash
+        params.inject({}) do |result, (key, value)|
+          result.merge(key.to_sym => symbolize_keys(value))
         end
-        new_value = case value
-        when Hash
-          symbolize_keys(value)
-        else
-          value
-        end
-        result[new_key] = new_value
-        result
+      when Array
+        params.map{|value| symbolize_keys(value)}
+      else
+        params
       end
     end
 
